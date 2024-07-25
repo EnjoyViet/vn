@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>금전 출납부</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 2px solid #000; /* 테두리를 더 진하게 설정 */
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .income {
+            color: blue;
+        }
+        .expense {
+            color: red;
+        }
+        form {
+            margin-bottom: 20px;
+        }
+        label {
+            margin-right: 10px;
+        }
+        select, input[type="datetime-local"], input[type="text"], input[type="number"], button {
+            margin: 5px 10px;
+        }
+        #summary {
+            margin-top: 20px;
+            font-size: 1.2em; /* 글씨 크기 조정 */
+        }
+        #summary span {
+            margin-left: 20px;
+            font-weight: bold;
+        }
+        #currentBalance {
+            color: black;
+        }
+        #totalIncome {
+            color: blue; /* 총 수입 파랑색 */
+        }
+        #totalExpense {
+            color: red; /* 총 지출 빨강색 */
+        }
+        .action-buttons button {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>금전 출납부</h1>
+
+    <!-- 언어 선택 드롭다운 추가 -->
+    <label for="languageSelect">언어 선택:</label>
+    <select id="languageSelect" onchange="changeLanguage()">
+        <option value="ko">한국어</option>
+        <option value="vi">베트남어</option>
+    </select>
+
+    <h2 id="addItemHeader">항목 추가하기</h2>
+    <form id="addItemForm">
+        <label for="date">날짜:</label>
+        <input type="datetime-local" id="date" required>
+        <label for="description">내용:</label>
+        <input type="text" id="description" required>
+        <label for="category">카테고리:</label>
+        <select id="category" required>
+            <optgroup label="수입">
+                <option value="월급">월급</option>
+                <option value="보너스">보너스</option>
+                <option value="기타 수입">기타 수입</option>
+            </optgroup>
+            <optgroup label="지출">
+                <option value="교통비">교통비</option>
+                <option value="광과금">광과금</option>
+                <option value="통신비">통신비</option>
+                <option value="식비">식비</option>
+                <option value="기타 지출">기타 지출</option>
+            </optgroup>
+        </select>
+        <label for="amount">금액:</label>
+        <input type="number" id="amount" value="0" required>
+        <div class="action-buttons">
+            <button type="button" onclick="addItem()">추가</button>
+            <button type="button" onclick="updateItem()">수정</button>
+            <button type="button" onclick="deleteItem()">삭제</button>
+            <button type="button" onclick="saveData()">저장</button>
+        </div>
+        <div id="summary">
+            <span id="currentBalance">현재 잔액: 0</span>
+            <span id="totalIncome">총 수입: 0</span>
+            <span id="totalExpense">총 지출: 0</span>
+        </div>
+    </form>
+
+    <table id="ledger">
+        <thead id="tableHead">
+            <!-- 언어 선택에 따라 테이블 헤더가 변경됩니다 -->
+            <tr>
+                <th><input type="checkbox" id="selectAll" onclick="selectAllItems(this)"></th>
+                <th>날짜</th>
+                <th>내용</th>
+                <th>카테고리</th>
+                <th>금액</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- 항목이 여기 추가됩니다 -->
+        </tbody>
+    </table>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 현재 시점의 날짜와 시간을 기본값으로 설정
+            var now = new Date();
+            var localDateTime = now.getFullYear() + '-' + 
+                ('0' + (now.getMonth() + 1)).slice(-2) + '-' + 
+                ('0' + now.getDate()).slice(-2) + 'T' + 
+                ('0' + now.getHours()).slice(-2) + ':' + 
+                ('0' + now.getMinutes()).slice(-2);
+            document.getElementById('date').value = localDateTime;
+
+            // 금액 입력란 클릭 시 기본값 제거
+            var amountInput = document.getElementById('amount');
+            amountInput.addEventListener('focus', function() {
+                if (this.value == 0) {
+                    this.value = '';
+                }
+            });
+            amountInput.addEventListener('blur', function() {
+                if (this.value == '') {
+                    this.value = 0;
+                }
+            });
+
+            // 초기 목록 로드 (로컬 스토리지에서 데이터 불러오기)
+            loadData();
+        });
+
+        function addItem() {
+            var date = document.getElementById('date').value;
+            var description = document.getElementById('description').value;
+            var category = document.getElementById('category').value;
+            var amount = parseFloat(document.getElementById('amount').value) || 0;
+
+            addRowToTable(formatDate(date), description, category, amount);
+            updateSummary();
+
+            // 입력 창 초기화
+            var now = new Date();
+            var localDateTime = now.getFullYear() + '-' + 
+                ('0' + (now.getMonth() + 1)).slice(-2) + '-' + 
+                ('0' + now.getDate()).slice(-2) + 'T' + 
+                ('0' + now.getHours()).slice(-2) + ':' + 
+                ('0' + now.getMinutes()).slice(-2);
+            document.getElementById('date').value = localDateTime;
+            document.getElementById('description').value = '';
+            document.getElementById('category').value = '월급';
+            document.getElementById('amount').value = 0;
+        }
+
+        function formatDate(dateString) {
+            var date = new Date(dateString);
+            var hours = date.getHours();
+            var minutes = ('0' + date.getMinutes()).slice(-2);
+            var ampm = hours >= 12 ? '오후' : '오전';
+            hours = hours % 12;
+            hours = hours ? hours : 12; // 0일 때 12로 설정
+            var strTime = ampm + ' ' + hours + ':' + minutes;
+            return date.getFullYear() + "-" + ('0' + (date.getMonth() + 1)).slice(-2) + "-" + ('0' + date.getDate()).slice(-2) + ' ' + strTime;
+        }
+
+        function addRowToTable(date, description, category, amount) {
+            var table = document.getElementById('ledger').getElementsByTagName('tbody')[0];
+            var newRow = table.insertRow();
+
+            var checkBoxCell = newRow.insertCell(0);
+            var dateCell = newRow.insertCell(1);
+            var descriptionCell = newRow.insertCell(2);
+            var categoryCell = newRow.insertCell(3);
+            var amountCell = newRow.insertCell(4);
+
+            var checkBox = document.createElement('input');
+            checkBox.type = 'checkbox';
+            checkBox.classList.add('itemCheckbox');
+            checkBoxCell.appendChild(checkBox);
+
+            dateCell.textContent = date;
+            descriptionCell.textContent = description;
+            categoryCell.textContent = category;
+            amountCell.textContent = amount.toLocaleString(); // 천 단위로 콤마 추가
+
+            if (['월급', '보너스', '기타 수입'].includes(category)) {
+                amountCell.classList.add('income');
+            } else {
+                amountCell.classList.add('expense');
+            }
+        }
+
+        function updateItem() {
+            var checkboxes = document.querySelectorAll('.itemCheckbox:checked');
+            if (checkboxes.length !== 1) {
+                alert('수정할 항목을 하나만 선택해주세요.');
+                return;
+            }
+
+            var selectedRow = checkboxes[0].parentNode.parentNode;
+
+            // 선택된 항목의 데이터를 입력 필드로 가져오기
+            var date = selectedRow.cells[1].textContent;
+            var description = selectedRow.cells[2].textContent;
+            var category = selectedRow.cells[3].textContent;
+            var amount = selectedRow.cells[4].textContent.replace(/,/g, ''); // 천 단위 콤마 제거
+
+            // 필드에 데이터 설정
+            document.getElementById('date').value = formatDateForInput(date);
+            document.getElementById('description').value = description;
+            document.getElementById('category').value = category;
+            document.getElementById('amount').value = amount;
+
+            // 추가 버튼을 수정 버튼으로 변경
+            document.querySelector('.action-buttons button:nth-child(1)').textContent = '수정 완료';
+            document.querySelector('.action-buttons button:nth-child(1)').onclick = function() {
+                saveUpdatedItem(selectedRow);
+            };
+        }
+
+        function saveUpdatedItem(row) {
+            var date = document.getElementById('date').value;
+            var description = document.getElementById('description').value;
+            var category = document.getElementById('category').value;
+            var amount = parseFloat(document.getElementById('amount').value) || 0;
+
+            row.cells[1].textContent = formatDate(date);
+            row.cells[2].textContent = description;
+            row.cells[3].textContent = category;
+            row.cells[4].textContent = amount.toLocaleString();
+
+            row.cells[4].classList.remove('income', 'expense');
+            if (['월급', '보너스', '기타 수입'].includes(category)) {
+                row.cells[4].classList.add('income');
+            } else {
+                row.cells[4].classList.add('expense');
+            }
+
+            updateSummary();
+
+            // 추가 버튼을 다시 추가 버튼으로 변경
+            document.querySelector('.action-buttons button:nth-child(1)').textContent = '추가';
+            document.querySelector('.action-buttons button:nth-child(1)').onclick = addItem;
+
+            // 입력 필드 초기화
+            var now = new Date();
+            var localDateTime = now.getFullYear() + '-' + 
+                ('0' + (now.getMonth() + 1)).slice(-2) + '-' + 
+                ('0' + now.getDate()).slice(-2) + 'T' + 
+                ('0' + now.getHours()).slice(-2) + ':' + 
+                ('0' + now.getMinutes()).slice(-2);
+            document.getElementById('date').value = localDateTime;
+            document.getElementById('description').value = '';
+            document.getElementById('category').value = '월급';
+            document.getElementById('amount').value = 0;
+        }
+
+        function formatDateForInput(dateString) {
+            var parts = dateString.split(' ');
+            var dateParts = parts[0].split('-');
+            var timeParts = parts[1].split(':');
+            var hours = parseInt(timeParts[0], 10);
+            var minutes = timeParts[1];
+            var ampm = parts[2];
+
+            if (ampm === '오후' && hours < 12) {
+                hours += 12;
+            } else if (ampm === '오전' && hours === 12) {
+                hours = 0;
+            }
+
+            var formattedDate = dateParts[0] + '-' + dateParts[1] + '-' + dateParts[2] + 'T' + ('0' + hours).slice(-2) + ':' + minutes;
+            return formattedDate;
+        }
+
+        function deleteItem() {
+            var checkboxes = document.querySelectorAll('.itemCheckbox:checked');
+            if (checkboxes.length === 0) {
+                alert('삭제할 항목을 선택해주세요.');
+                return;
+            }
+
+            checkboxes.forEach(function(checkbox) {
+                var row = checkbox.parentNode.parentNode;
+                row.parentNode.removeChild(row);
+            });
+
+            updateSummary();
+        }
+
+        function updateSummary() {
+            var rows = document.getElementById('ledger').getElementsByTagName('tbody')[0].rows;
+            var totalIncome = 0;
+            var totalExpense = 0;
+
+            for (var i = 0; i < rows.length; i++) {
+                var amount = parseFloat(rows[i].cells[4].textContent.replace(/,/g, ''));
+                if (rows[i].cells[4].classList.contains('income')) {
+                    totalIncome += amount;
+                } else {
+                    totalExpense += amount;
+                }
+            }
+
+            var currentBalance = totalIncome - totalExpense;
+
+            document.getElementById('currentBalance').textContent = '현재 잔액: ' + currentBalance.toLocaleString();
+            document.getElementById('totalIncome').textContent = '총 수입: ' + totalIncome.toLocaleString();
+            document.getElementById('totalExpense').textContent = '총 지출: ' + totalExpense.toLocaleString();
+        }
+
+        function saveData() {
+            var table = document.getElementById('ledger').getElementsByTagName('tbody')[0];
+            var rows = table.rows;
+            var data = [];
+
+            for (var i = 0; i < rows.length; i++) {
+                var date = rows[i].cells[1].textContent;
+                var description = rows[i].cells[2].textContent;
+                var category = rows[i].cells[3].textContent;
+                var amount = parseFloat(rows[i].cells[4].textContent.replace(/,/g, ''));
+
+                data.push({
+                    date: date,
+                    description: description,
+                    category: category,
+                    amount: amount
+                });
+            }
+
+            localStorage.setItem('ledgerData', JSON.stringify(data));
+            alert('데이터가 저장되었습니다.');
+        }
+
+        function loadData() {
+            var data = localStorage.getItem('ledgerData');
+            if (data) {
+                var items = JSON.parse(data);
+                items.forEach(function(item) {
+                    addRowToTable(item.date, item.description, item.category, item.amount);
+                });
+                updateSummary();
+            }
+        }
+
+        function changeLanguage() {
+            var languageSelect = document.getElementById('languageSelect');
+            var selectedLanguage = languageSelect.value;
+
+            var languageData = {
+                ko: {
+                    addItemHeader: '항목 추가하기',
+                    dateLabel: '날짜:',
+                    descriptionLabel: '내용:',
+                    categoryLabel: '카테고리:',
+                    amountLabel: '금액:',
+                    incomeOptions: ['월급', '보너스', '기타 수입'],
+                    expenseOptions: ['교통비', '광과금', '통신비', '식비', '기타 지출'],
+                    summaryText: ['현재 잔액: ', '총 수입: ', '총 지출: '],
+                    actionButtons: ['추가', '수정', '삭제', '저장'],
+                    tableHeaders: ['날짜', '내용', '카테고리', '금액']
+                },
+                vi: {
+                    addItemHeader: 'Thêm mục mới',
+                    dateLabel: 'Ngày:',
+                    descriptionLabel: 'Nội dung:',
+                    categoryLabel: 'Danh mục:',
+                    amountLabel: 'Số tiền:',
+                    incomeOptions: ['Lương', 'Thưởng', 'Thu nhập khác'],
+                    expenseOptions: ['Chi phí giao thông', 'Hóa đơn', 'Chi phí viễn thông', 'Chi phí ăn uống', 'Chi phí khác'],
+                    summaryText: ['Số dư hiện tại: ', 'Tổng thu nhập: ', 'Tổng chi phí: '],
+                    actionButtons: ['Thêm', 'Cập nhật', 'Xóa', 'Lưu'],
+                    tableHeaders: ['Ngày', 'Nội dung', 'Danh mục', 'Số tiền']
+                }
+            };
+
+            var data = languageData[selectedLanguage];
+
+            document.getElementById('addItemHeader').textContent = data.addItemHeader;
+            document.querySelector('label[for="date"]').textContent = data.dateLabel;
+            document.querySelector('label[for="description"]').textContent = data.descriptionLabel;
+            document.querySelector('label[for="category"]').textContent = data.categoryLabel;
+            document.querySelector('label[for="amount"]').textContent = data.amountLabel;
+
+            var categorySelect = document.getElementById('category');
+            categorySelect.innerHTML = '';
+            var incomeOptGroup = document.createElement('optgroup');
+            incomeOptGroup.label = selectedLanguage === 'ko' ? '수입' : 'Thu nhập';
+            data.incomeOptions.forEach(function(option) {
+                var opt = document.createElement('option');
+                opt.value = option;
+                opt.textContent = option;
+                incomeOptGroup.appendChild(opt);
+            });
+            categorySelect.appendChild(incomeOptGroup);
+
+            var expenseOptGroup = document.createElement('optgroup');
+            expenseOptGroup.label = selectedLanguage === 'ko' ? '지출' : 'Chi phí';
+            data.expenseOptions.forEach(function(option) {
+                var opt = document.createElement('option');
+                opt.value = option;
+                opt.textContent = option;
+                expenseOptGroup.appendChild(opt);
+            });
+            categorySelect.appendChild(expenseOptGroup);
+
+            var actionButtons = document.querySelectorAll('.action-buttons button');
+            for (var i = 0; i < actionButtons.length; i++) {
+                actionButtons[i].textContent = data.actionButtons[i];
+            }
+
+            var summarySpans = document.querySelectorAll('#summary span');
+            summarySpans[0].textContent = data.summaryText[0] + summarySpans[0].textContent.split(':')[1];
+            summarySpans[1].textContent = data.summaryText[1] + summarySpans[1].textContent.split(':')[1];
+            summarySpans[2].textContent = data.summaryText[2] + summarySpans[2].textContent.split(':')[1];
+
+            var tableHeaders = document.querySelectorAll('#tableHead th');
+            for (var j = 1; j < tableHeaders.length; j++) {
+                tableHeaders[j].textContent = data.tableHeaders[j - 1];
+            }
+        }
+
+        function selectAllItems(selectAllCheckbox) {
+            var checkboxes = document.querySelectorAll('.itemCheckbox');
+            checkboxes.forEach(function(checkbox) {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+        }
+    </script>
+</body>
+</html>
